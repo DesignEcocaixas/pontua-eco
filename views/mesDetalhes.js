@@ -30,6 +30,35 @@ function normalizarBusca(texto) {
 
 module.exports = function renderMesDetalhes(mes, registros, analise, msg = null, tipoMsg = 'success', usuarioLogado = null, bonificacoes = []) {
     let registrosHtml = '';
+
+    // Extrai clientes únicos de "Arte de Cliente" do mês para associar em registros de "Clichê"
+    const clientesComClicheSet = new Set();
+    registros.forEach(reg => {
+        if (!reg.isIdeia && reg.tipo === 'Clichê' && reg.cliente && reg.cliente.trim()) {
+            clientesComClicheSet.add(normalizarBusca(reg.cliente.trim()));
+        }
+    });
+
+    const mapaClientesArte = new Map();
+    registros.forEach(reg => {
+        if (!reg.isIdeia && reg.tipo === 'Arte de Cliente' && reg.cliente && reg.cliente.trim()) {
+            const nomeLimpo = reg.cliente.trim();
+            const chave = normalizarBusca(nomeLimpo);
+            if (!mapaClientesArte.has(chave)) {
+                mapaClientesArte.set(chave, {
+                    nome: nomeLimpo,
+                    temCliche: clientesComClicheSet.has(chave)
+                });
+            }
+        }
+    });
+
+    // Ordena: primeiro clientes sem clichê lançado no mês, depois ordem alfabética
+    const clientesArteMes = Array.from(mapaClientesArte.values()).sort((a, b) => {
+        if (a.temCliche !== b.temCliche) return a.temCliche ? 1 : -1;
+        return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+    });
+    const clientesArteJson = JSON.stringify(clientesArteMes).replace(/</g, '\\u003c');
     
     if (registros.length === 0) {
         registrosHtml = '<tr class="eco-empty-row"><td colspan="7" class="text-center text-muted py-4">Nenhuma atividade ou ideia registrada.</td></tr>';
@@ -146,7 +175,7 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
             const max = parseInt(b.pontos_max, 10);
             const atingida = analise.totalConsolidado >= min && analise.totalConsolidado <= max;
             const textoFaixa = max >= 9999 ? `A partir de ${min} pts` : `De ${min} a ${max} pts`;
-            const valorFormatado = `R$ ${parseFloat(b.valor).toFixed(2).replace('.', ',')}`;
+            const valorFormatado = 'R' + String.fromCharCode(36) + ' ' + parseFloat(b.valor).toFixed(2).replace('.', ',');
 
             bonificacoesRegrasHtml += `
             <tr class="${atingida ? 'table-success' : ''}">
@@ -189,6 +218,58 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
             font-weight: 500;
         }
 
+        /* Combobox de associação Clichê <-> Arte de Cliente */
+        .eco-combobox-plain .form-control {
+            border-radius: var(--bs-border-radius-sm) !important;
+        }
+        .eco-combobox-toggle {
+            min-width: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .eco-combobox-menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            z-index: 1060;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.14);
+            max-height: 195px;
+            overflow-y: auto;
+        }
+        .eco-combobox-item {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid #f1f3f5;
+            padding: 9px 12px;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 0.84rem;
+            color: #212529;
+            cursor: pointer;
+            transition: background-color 0.12s ease;
+        }
+        .eco-combobox-item:last-child { border-bottom: none; }
+        .eco-combobox-item:hover,
+        .eco-combobox-item:focus {
+            background-color: rgba(11, 107, 58, 0.08);
+            outline: none;
+        }
+        .eco-combobox-empty {
+            padding: 10px 12px;
+            font-size: 0.78rem;
+            color: #6c757d;
+            text-align: center;
+        }
+
         /* Mantém os filtros em linha única no tablet/desktop */
         @media (min-width: 768px) {
             #filtrosExtrasRegistros.collapse,
@@ -225,7 +306,6 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                 grid-column: 1 / -1;
             }
 
-            /* Cards de resumo mais equilibrados na tela do celular */
             #cardResumoMes {
                 padding: 1.25rem !important;
             }
@@ -241,7 +321,6 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                 border-bottom: none !important;
             }
 
-            /* Tabela de Registros vira lista de cards sem scroll horizontal */
             #cardTabelaRegistros .table-responsive {
                 overflow-x: visible;
             }
@@ -360,7 +439,6 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                 border: none;
             }
 
-            /* Rodapé de paginação centralizado */
             #footerPaginacaoRegistros {
                 flex-direction: column;
                 align-items: center !important;
@@ -376,7 +454,6 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                 justify-content: center;
             }
 
-            /* Rodapés de modais confortáveis para toque */
             #modalRegistro .modal-footer .btn,
             #modalEditarRegistro .modal-footer .btn {
                 min-height: 38px;
@@ -393,10 +470,16 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                 width: 100%;
             }
 
-            /* Abas do Modal de Regras empilháveis em telas muito estreitas */
             #regrasTabs .nav-link {
                 font-size: 0.8rem;
                 padding: 8px 6px !important;
+            }
+
+            .eco-combobox-toggle {
+                min-width: 42px;
+            }
+            .eco-combobox-item {
+                padding: 11px 12px;
             }
         }
     </style>
@@ -540,7 +623,16 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                         </div>
                         <div class="col-12 col-md-8 grupo-comum">
                             <label class="form-label small fw-bold">Cliente / Título</label>
-                            <input type="text" name="cliente" class="form-control form-control-sm" placeholder="Nome do Cliente ou Tema">
+                            <div id="comboboxNovoCliente" class="position-relative eco-combobox-plain">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" name="cliente" id="novoClienteRegistro" class="form-control form-control-sm" placeholder="Nome do Cliente ou Tema" autocomplete="off">
+                                    <button type="button" id="btnToggleClientesNovo" class="btn btn-outline-secondary eco-combobox-toggle d-none" title="Selecionar cliente de Arte de Cliente" aria-label="Selecionar cliente">
+                                        <i class="ph ph-caret-down"></i>
+                                    </button>
+                                </div>
+                                <div id="dropdownClientesNovo" class="eco-combobox-menu d-none"></div>
+                            </div>
+                            <div id="hintClientesNovo" class="form-text d-none" style="font-size: 0.72rem;"></div>
                         </div>
 
                         <div class="col-6 col-md-4 grupo-alteracoes" style="display:none;">
@@ -600,7 +692,16 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                         </div>
                         <div class="col-12 col-md-8">
                             <label class="form-label small fw-bold">Cliente / Título</label>
-                            <input type="text" name="cliente" id="editClienteRegistro" class="form-control form-control-sm" placeholder="Nome do Cliente ou Tema">
+                            <div id="comboboxEditCliente" class="position-relative eco-combobox-plain">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" name="cliente" id="editClienteRegistro" class="form-control form-control-sm" placeholder="Nome do Cliente ou Tema" autocomplete="off">
+                                    <button type="button" id="btnToggleClientesEdit" class="btn btn-outline-secondary eco-combobox-toggle d-none" title="Selecionar cliente de Arte de Cliente" aria-label="Selecionar cliente">
+                                        <i class="ph ph-caret-down"></i>
+                                    </button>
+                                </div>
+                                <div id="dropdownClientesEdit" class="eco-combobox-menu d-none"></div>
+                            </div>
+                            <div id="hintClientesEdit" class="form-text d-none" style="font-size: 0.72rem;"></div>
                         </div>
 
                         <div class="col-6 col-md-4 edit-grupo-alteracoes" style="display:none;">
@@ -688,7 +789,7 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                         </li>
                         <li class="nav-item" role="presentation">
                             <button class="nav-link btn-sm fw-semibold py-2" id="tab-bonus-btn" data-bs-toggle="pill" data-bs-target="#tab-bonus" type="button" role="tab">
-                                <i class="ph ph-currency-dollar"></i> Bonificação (R$)
+                                <i class="ph ph-currency-dollar"></i> Bonificação
                             </button>
                         </li>
                     </ul>
@@ -815,7 +916,7 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                                             <thead class="table-light">
                                                 <tr>
                                                     <th class="ps-3 py-2">Intervalo de Pontuação</th>
-                                                    <th class="py-2">Bonificação (R$)</th>
+                                                    <th class="py-2">Bonificação</th>
                                                     <th class="pe-3 py-2 text-end">Situação no Mês</th>
                                                 </tr>
                                             </thead>
@@ -840,6 +941,140 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
 
     const scriptFormulario = `
     <script>
+        var CLIENTES_ARTE_MES = ${clientesArteJson};
+
+        function normalizarTextoEco(str) {
+            return (str || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
+        }
+
+        function criarComboboxClientes(cfg) {
+            var wrap = document.getElementById(cfg.wrapId);
+            var input = document.getElementById(cfg.inputId);
+            var btn = document.getElementById(cfg.btnId);
+            var menu = document.getElementById(cfg.menuId);
+            var hint = document.getElementById(cfg.hintId);
+            var ativo = false;
+
+            if (!wrap || !input || !btn || !menu || !hint) {
+                return { setAtivo: function() {}, fechar: function() {} };
+            }
+
+            function fechar() {
+                menu.classList.add('d-none');
+            }
+
+            function renderizar(filtrarPeloInput) {
+                if (!ativo || CLIENTES_ARTE_MES.length === 0) {
+                    fechar();
+                    return;
+                }
+
+                var termo = filtrarPeloInput ? normalizarTextoEco(input.value) : '';
+                var lista = CLIENTES_ARTE_MES.filter(function(item) {
+                    return !termo || normalizarTextoEco(item.nome).indexOf(termo) !== -1;
+                });
+
+                menu.innerHTML = '';
+
+                if (lista.length === 0) {
+                    var vazio = document.createElement('div');
+                    vazio.className = 'eco-combobox-empty';
+                    vazio.textContent = 'Nenhuma Arte de Cliente correspondente — o texto digitado será salvo normalmente.';
+                    menu.appendChild(vazio);
+                } else {
+                    lista.forEach(function(item) {
+                        var opcao = document.createElement('button');
+                        opcao.type = 'button';
+                        opcao.className = 'eco-combobox-item';
+
+                        var spanNome = document.createElement('span');
+                        spanNome.className = 'fw-medium text-truncate';
+                        spanNome.textContent = item.nome;
+
+                        var spanBadge = document.createElement('span');
+                        spanBadge.className = item.temCliche
+                            ? 'badge bg-secondary-subtle text-secondary flex-shrink-0'
+                            : 'badge bg-success-subtle text-success flex-shrink-0';
+                        spanBadge.textContent = item.temCliche ? 'Clichê lançado' : 'Sem clichê';
+
+                        opcao.appendChild(spanNome);
+                        opcao.appendChild(spanBadge);
+
+                        opcao.addEventListener('mousedown', function(e) {
+                            e.preventDefault();
+                            input.value = item.nome;
+                            fechar();
+                            input.focus();
+                        });
+
+                        menu.appendChild(opcao);
+                    });
+                }
+
+                menu.classList.remove('d-none');
+            }
+
+            function setAtivo(ligado) {
+                ativo = Boolean(ligado);
+                fechar();
+
+                if (!ativo) {
+                    btn.classList.add('d-none');
+                    wrap.classList.add('eco-combobox-plain');
+                    input.placeholder = 'Nome do Cliente ou Tema';
+                    hint.classList.add('d-none');
+                    hint.textContent = '';
+                    return;
+                }
+
+                hint.classList.remove('d-none');
+                if (CLIENTES_ARTE_MES.length > 0) {
+                    btn.classList.remove('d-none');
+                    wrap.classList.remove('eco-combobox-plain');
+                    input.placeholder = 'Digite ou selecione uma Arte de Cliente do mês...';
+                    var qtd = CLIENTES_ARTE_MES.length;
+                    hint.textContent = 'Associe a uma Arte de Cliente já lançada neste mês (' + qtd + (qtd === 1 ? ' disponível' : ' disponíveis') + ') ou digite outro nome.';
+                } else {
+                    btn.classList.add('d-none');
+                    wrap.classList.add('eco-combobox-plain');
+                    input.placeholder = 'Nome do Cliente ou Tema';
+                    hint.textContent = 'Nenhuma Arte de Cliente lançada neste mês ainda — digite o cliente manualmente.';
+                }
+            }
+
+            input.addEventListener('focus', function() {
+                if (ativo && CLIENTES_ARTE_MES.length > 0) renderizar(true);
+            });
+
+            input.addEventListener('input', function() {
+                if (ativo && CLIENTES_ARTE_MES.length > 0) renderizar(true);
+            });
+
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') fechar();
+            });
+
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (!ativo) return;
+                if (menu.classList.contains('d-none')) {
+                    renderizar(false);
+                    input.focus();
+                } else {
+                    fechar();
+                }
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!wrap.contains(e.target)) fechar();
+            });
+
+            return { setAtivo: setAtivo, fechar: fechar };
+        }
+
+        var comboboxNovo = null;
+        var comboboxEdit = null;
+
         function atualizarCamposPorTipo(val, prefixo) {
             var seletores = [
                 '.' + prefixo + 'grupo-alteracoes',
@@ -860,23 +1095,52 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
             } else if (val === 'Clichê') {
                 document.querySelector('.' + prefixo + 'grupo-dias').style.display = 'block';
             }
-        }
 
-        var selectTipoNovo = document.getElementById('tipoRegistro');
-        if (selectTipoNovo) {
-            selectTipoNovo.addEventListener('change', function() {
-                atualizarCamposPorTipo(this.value, '');
-            });
-        }
-
-        var selectTipoEdit = document.getElementById('editTipoRegistro');
-        if (selectTipoEdit) {
-            selectTipoEdit.addEventListener('change', function() {
-                atualizarCamposPorTipo(this.value, 'edit-');
-            });
+            if (prefixo === '' && comboboxNovo) {
+                comboboxNovo.setAtivo(val === 'Clichê');
+            } else if (prefixo === 'edit-' && comboboxEdit) {
+                comboboxEdit.setAtivo(val === 'Clichê');
+            }
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            comboboxNovo = criarComboboxClientes({
+                wrapId: 'comboboxNovoCliente',
+                inputId: 'novoClienteRegistro',
+                btnId: 'btnToggleClientesNovo',
+                menuId: 'dropdownClientesNovo',
+                hintId: 'hintClientesNovo'
+            });
+
+            comboboxEdit = criarComboboxClientes({
+                wrapId: 'comboboxEditCliente',
+                inputId: 'editClienteRegistro',
+                btnId: 'btnToggleClientesEdit',
+                menuId: 'dropdownClientesEdit',
+                hintId: 'hintClientesEdit'
+            });
+
+            var selectTipoNovo = document.getElementById('tipoRegistro');
+            if (selectTipoNovo) {
+                selectTipoNovo.addEventListener('change', function() {
+                    atualizarCamposPorTipo(this.value, '');
+                });
+            }
+
+            var selectTipoEdit = document.getElementById('editTipoRegistro');
+            if (selectTipoEdit) {
+                selectTipoEdit.addEventListener('change', function() {
+                    atualizarCamposPorTipo(this.value, 'edit-');
+                });
+            }
+
+            var modalNovoReg = document.getElementById('modalRegistro');
+            if (modalNovoReg) {
+                modalNovoReg.addEventListener('hidden.bs.modal', function() {
+                    if (comboboxNovo) comboboxNovo.fechar();
+                });
+            }
+
             // 1. Preenchimento do Modal de Edição de Registro
             var modalEditarReg = document.getElementById('modalEditarRegistro');
             if (modalEditarReg) {
@@ -901,6 +1165,10 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                     document.getElementById('editPrazoRegistro').value = prazoVal;
 
                     atualizarCamposPorTipo(tipo, 'edit-');
+                });
+
+                modalEditarReg.addEventListener('hidden.bs.modal', function() {
+                    if (comboboxEdit) comboboxEdit.fechar();
                 });
             }
 
@@ -937,10 +1205,6 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
 
             var paginaAtual = 1;
 
-            function normalizar(str) {
-                return (str || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
-            }
-
             function atualizarBadgeFiltros() {
                 if (!badgeFiltros) return;
                 var ativos = 0;
@@ -973,7 +1237,7 @@ module.exports = function renderMesDetalhes(mes, registros, analise, msg = null,
                 if (resetarPagina) paginaAtual = 1;
                 atualizarBadgeFiltros();
 
-                var termo = normalizar(inputBusca.value);
+                var termo = normalizarTextoEco(inputBusca.value);
                 var de = inputDe.value;
                 var para = inputPara.value;
                 var porPagina = parseInt(selectPorPagina.value, 10) || 10;
