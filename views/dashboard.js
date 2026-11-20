@@ -1,6 +1,19 @@
 // Arquivo: views/dashboard.js
 const renderLayout = require('./layout');
 
+function escapeHtml(texto) {
+    return String(texto ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatarReais(valor) {
+    return 'R' + String.fromCharCode(36) + ' ' + parseFloat(valor || 0).toFixed(2).replace('.', ',');
+}
+
 module.exports = function renderDashboard(usuario, mesAtual = null, pontos = 0, bonificacao = null, estatisticas = [], todosMeses = []) {
     let content = '';
     let pageScripts = '';
@@ -38,14 +51,163 @@ module.exports = function renderDashboard(usuario, mesAtual = null, pontos = 0, 
 
         const opcoesMesesHtml = todosMeses.map(m => `
             <option value="${m.id}" ${m.id === mesAtual.id ? 'selected' : ''}>
-                ${m.nome} / ${m.ano} ${m.status === 'aberto' ? '(Aberto)' : '(Fechado)'}
+                ${escapeHtml(m.nome)} / ${m.ano} ${m.status === 'aberto' ? '(Aberto)' : '(Fechado)'}
             </option>
         `).join('');
+
+        // Monta os cards de produtividade e os templates ocultos dos popovers
+        let cardsEstatisticasHtml = '';
+        let templatesPopoverHtml = '';
+
+        estatisticas.forEach((est, idx) => {
+            const itens = Array.isArray(est.itens) ? est.itens : [];
+            const popId = 'ecoPopCat' + idx;
+            const linkDestino = est.tipo === 'Ideias Aprovadas' ? '/ideias' : '/meses/' + mesAtual.id;
+            const labelDestino = est.tipo === 'Ideias Aprovadas' ? 'Ver banco de ideias' : 'Gerenciar no mês';
+
+            let listaItensHtml = '';
+            if (itens.length === 0) {
+                listaItensHtml = '<div class="text-muted small py-2 text-center">Nenhum item listado.</div>';
+            } else {
+                listaItensHtml = itens.map(item => `
+                    <div class="eco-pop-item">
+                        <div class="eco-pop-item-title">${escapeHtml(item.titulo)}</div>
+                        <div class="eco-pop-item-meta">
+                            <span>${escapeHtml(item.detalhe || '')}</span>
+                            ${item.data ? '<span class="text-muted">' + escapeHtml(item.data) + '</span>' : ''}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            templatesPopoverHtml += `
+            <div id="${popId}" class="d-none">
+                <div class="eco-pop-list">
+                    ${listaItensHtml}
+                </div>
+                <div class="eco-pop-footer">
+                    <a href="${linkDestino}" class="eco-pop-link">
+                        <span>${labelDestino}</span>
+                        <i class="ph ph-arrow-right"></i>
+                    </a>
+                </div>
+            </div>`;
+
+            cardsEstatisticasHtml += `
+            <div class="col-6 col-md-3">
+                <div class="card card-eco eco-dash-stat-card border-0 p-3 bg-white text-center h-100 d-flex flex-column justify-content-between"
+                     tabindex="0"
+                     role="button"
+                     data-popover-target="${popId}"
+                     data-popover-title="${escapeHtml(est.tipo)} (${est.qtdRegistros})">
+                    <span class="eco-stat-hint" title="Ver lista de itens"><i class="ph ph-list-bullets"></i></span>
+                    <div>
+                        <div class="fs-2 text-primary fw-bold lh-sm">${est.qtdRegistros}</div>
+                        <div class="small text-muted fw-bold text-uppercase mt-1">${escapeHtml(est.tipo)}</div>
+                    </div>
+                    <div class="mt-2">
+                        <span class="badge bg-success">+${est.pontos} pts</span>
+                    </div>
+                </div>
+            </div>`;
+        });
 
         content = `
         <style>
             .eco-dash-stat-card {
-                transition: transform 0.15s ease;
+                position: relative;
+                cursor: pointer;
+                border: 1px solid transparent !important;
+                transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+            }
+            .eco-dash-stat-card:hover,
+            .eco-dash-stat-card:focus {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 18px rgba(11, 107, 58, 0.12);
+                border-color: rgba(11, 107, 58, 0.28) !important;
+                outline: none;
+            }
+            .eco-stat-hint {
+                position: absolute;
+                top: 8px;
+                right: 10px;
+                color: #adb5bd;
+                font-size: 0.9rem;
+                transition: color 0.15s ease;
+            }
+            .eco-dash-stat-card:hover .eco-stat-hint {
+                color: var(--eco-green);
+            }
+
+            /* Popover com a lista de atividades do card */
+            .eco-dash-popover {
+                max-width: 300px;
+                width: 290px;
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                border-radius: 10px;
+                box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            }
+            .eco-dash-popover .popover-header {
+                background-color: #f8faf9;
+                color: var(--eco-green);
+                font-weight: 700;
+                font-size: 0.82rem;
+                border-bottom: 1px solid #e9ecef;
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+                padding: 9px 12px;
+            }
+            .eco-dash-popover .popover-body {
+                padding: 0;
+            }
+            .eco-pop-list {
+                max-height: 230px;
+                overflow-y: auto;
+                padding: 6px 12px;
+            }
+            .eco-pop-item {
+                padding: 7px 0;
+                border-bottom: 1px solid #f1f3f5;
+            }
+            .eco-pop-item:last-child {
+                border-bottom: none;
+            }
+            .eco-pop-item-title {
+                font-size: 0.8rem;
+                font-weight: 600;
+                color: #212529;
+                line-height: 1.3;
+                word-break: break-word;
+            }
+            .eco-pop-item-meta {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 8px;
+                margin-top: 2px;
+                font-size: 0.72rem;
+                color: #6c757d;
+            }
+            .eco-pop-footer {
+                padding: 8px 12px;
+                background: #fafafa;
+                border-top: 1px solid #eef0f3;
+                border-bottom-left-radius: 10px;
+                border-bottom-right-radius: 10px;
+            }
+            .eco-pop-link {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                font-size: 0.75rem;
+                font-weight: 600;
+                color: var(--eco-green);
+                text-decoration: none;
+            }
+            .eco-pop-link:hover {
+                color: var(--eco-green-light);
+                text-decoration: underline;
             }
 
             /* =========================================================
@@ -100,13 +262,16 @@ module.exports = function renderDashboard(usuario, mesAtual = null, pontos = 0, 
                 .eco-dash-stat-card .fs-2 {
                     font-size: 1.65rem !important;
                 }
+                .eco-dash-popover {
+                    max-width: calc(100vw - 28px);
+                }
             }
         </style>
 
         <div class="eco-dash-topbar d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
             <div>
                 <h5 class="m-0 fw-bold text-dark d-flex flex-wrap align-items-center gap-1">
-                    <span>Resumo do Mês: ${mesAtual.nome} / ${mesAtual.ano}</span>
+                    <span>Resumo do Mês: ${escapeHtml(mesAtual.nome)} / ${mesAtual.ano}</span>
                     ${badgeStatusMes}
                 </h5>
                 <p class="text-muted m-0 small mt-1">Acompanhe seu progresso, SLA e bonificações.</p>
@@ -152,11 +317,11 @@ module.exports = function renderDashboard(usuario, mesAtual = null, pontos = 0, 
                         <div class="eco-dash-bonus-header d-flex justify-content-between align-items-end mb-2">
                             <div>
                                 <div class="text-muted fw-bold mb-1">Bonificação Alcançada</div>
-                                <h2 class="text-success fw-bold m-0">R$ ${bonificacao.valor.toFixed(2).replace('.', ',')}</h2>
+                                <h2 class="text-success fw-bold m-0">${formatarReais(bonificacao.valor)}</h2>
                             </div>
                             ${bonificacao.proximaMeta ? `
                             <div class="eco-dash-bonus-meta text-end">
-                                <div class="small text-muted">Próximo Nível (R$ ${bonificacao.proximaMeta.toFixed(2).replace('.', ',')})</div>
+                                <div class="small text-muted">Próximo Nível (${formatarReais(bonificacao.proximaMeta)})</div>
                                 <div class="fw-bold text-primary">Faltam ${bonificacao.pontosFaltantes} pts</div>
                             </div>` : `<div class="eco-dash-bonus-meta fw-bold text-success"><i class="ph-fill ph-check-circle"></i> Bônus Máximo</div>`}
                         </div>
@@ -179,23 +344,17 @@ module.exports = function renderDashboard(usuario, mesAtual = null, pontos = 0, 
             </div>
 
             <!-- Estatísticas Rápidas -->
-            <h6 class="fw-bold text-dark mt-4 mb-3">Produtividade do Mês (Aprovados no SLA)</h6>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mt-4 mb-3">
+                <h6 class="fw-bold text-dark m-0">Produtividade do Mês (Aprovados no SLA)</h6>
+                ${estatisticas.length > 0 ? '<span class="small text-muted"><i class="ph ph-cursor-click me-1"></i>Passe o mouse ou toque nos cards para ver a lista</span>' : ''}
+            </div>
             <div class="row g-2 g-md-3">
-                ${estatisticas.map(est => `
-                    <div class="col-6 col-md-3">
-                        <div class="card card-eco eco-dash-stat-card border-0 p-3 bg-white text-center h-100 d-flex flex-column justify-content-between">
-                            <div>
-                                <div class="fs-2 text-primary fw-bold lh-sm">${est.qtdRegistros}</div>
-                                <div class="small text-muted fw-bold text-uppercase mt-1">${est.tipo}</div>
-                            </div>
-                            <div class="mt-2">
-                                <span class="badge bg-success">+${est.pontos} pts</span>
-                            </div>
-                        </div>
-                    </div>
-                `).join('')}
+                ${cardsEstatisticasHtml}
                 ${estatisticas.length === 0 ? '<div class="col-12"><div class="text-muted small">Nenhuma atividade contabilizada para SLA neste mês.</div></div>' : ''}
             </div>
+
+            <!-- Templates ocultos para os Popovers dos Cards -->
+            ${templatesPopoverHtml}
         </div>
         `;
 
@@ -214,6 +373,91 @@ module.exports = function renderDashboard(usuario, mesAtual = null, pontos = 0, 
                         formFiltro.submit();
                     });
                 }
+
+                // Popovers interativos nos cards de produtividade (hover no desktop + toque no mobile)
+                var statCards = Array.from(document.querySelectorAll('.eco-dash-stat-card[data-popover-target]'));
+                var instancias = [];
+
+                function fecharTodosExceto(cardAtual) {
+                    instancias.forEach(function(item) {
+                        if (item.card !== cardAtual) {
+                            clearTimeout(item.timer);
+                            item.pop.hide();
+                            item.aberto = false;
+                        }
+                    });
+                }
+
+                statCards.forEach(function(card) {
+                    var targetId = card.getAttribute('data-popover-target');
+                    var title = card.getAttribute('data-popover-title') || '';
+                    var tpl = document.getElementById(targetId);
+                    if (!tpl || !window.bootstrap || !window.bootstrap.Popover) return;
+
+                    var pop = new bootstrap.Popover(card, {
+                        trigger: 'manual',
+                        placement: 'auto',
+                        container: 'body',
+                        html: true,
+                        sanitize: false,
+                        customClass: 'eco-dash-popover',
+                        title: title,
+                        content: tpl.innerHTML
+                    });
+
+                    var estado = { card: card, pop: pop, timer: null, aberto: false };
+                    instancias.push(estado);
+
+                    function abrir() {
+                        clearTimeout(estado.timer);
+                        fecharTodosExceto(card);
+                        if (!estado.aberto) {
+                            pop.show();
+                            estado.aberto = true;
+                        }
+                    }
+
+                    function agendarFechamento() {
+                        clearTimeout(estado.timer);
+                        estado.timer = setTimeout(function() {
+                            pop.hide();
+                            estado.aberto = false;
+                        }, 160);
+                    }
+
+                    card.addEventListener('mouseenter', abrir);
+                    card.addEventListener('mouseleave', agendarFechamento);
+
+                    card.addEventListener('shown.bs.popover', function() {
+                        var popId = card.getAttribute('aria-describedby');
+                        var popEl = popId ? document.getElementById(popId) : null;
+                        if (popEl && !popEl.dataset.hoverBound) {
+                            popEl.dataset.hoverBound = 'true';
+                            popEl.addEventListener('mouseenter', function() {
+                                clearTimeout(estado.timer);
+                            });
+                            popEl.addEventListener('mouseleave', agendarFechamento);
+                        }
+                    });
+
+                    // Suporte a clique/toque (especialmente útil no mobile)
+                    card.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        if (estado.aberto) {
+                            clearTimeout(estado.timer);
+                            pop.hide();
+                            estado.aberto = false;
+                        } else {
+                            abrir();
+                        }
+                    });
+                });
+
+                document.addEventListener('click', function(e) {
+                    if (!e.target.closest('.eco-dash-stat-card') && !e.target.closest('.eco-dash-popover')) {
+                        fecharTodosExceto(null);
+                    }
+                });
             });
         </script>
         `;

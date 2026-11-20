@@ -17,6 +17,33 @@ const NOMES_MESES = [
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 
+function formatarDataCurta(rawDate) {
+    if (!rawDate) return '';
+    const d = rawDate instanceof Date ? rawDate : new Date(rawDate);
+    if (isNaN(d.getTime())) return '';
+    const dia = String(d.getDate()).padStart(2, '0');
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    return dia + '/' + mes;
+}
+
+function formatarDetalheItem(reg) {
+    const alt = parseInt(reg.qtd_alteracoes || 0, 10);
+    if (['Post', 'Carrossel', 'Stories', 'Reels'].includes(reg.tipo)) {
+        return alt + ' alt • ' + (reg.tempo_producao_minutos || 0) + ' min';
+    }
+    if (reg.tipo === 'Arte Fantasia') {
+        return alt + ' alt';
+    }
+    if (reg.tipo === 'Arte de Cliente') {
+        const prazo = (reg.qtd_dias == 72 || reg.qtd_dias == 99) ? '+72h' : (reg.qtd_dias || 24) + 'h';
+        return alt + ' alt • ' + prazo;
+    }
+    if (reg.tipo === 'Clichê') {
+        return (reg.qtd_dias || 0) + ' dias';
+    }
+    return '';
+}
+
 router.get('/login', (req, res) => {
     if (req.session.usuario) return res.redirect('/dashboard');
     res.send(renderLogin());
@@ -77,34 +104,55 @@ router.get('/dashboard', verificarAuth, async (req, res) => {
         }
 
         // 3. Busca os registros do mês selecionado
-        const [registros] = await db.query('SELECT * FROM registros WHERE mes_id = ?', [mesSelecionado.id]);
+        const [registros] = await db.query(
+            'SELECT * FROM registros WHERE mes_id = ? ORDER BY id DESC',
+            [mesSelecionado.id]
+        );
 
-        // 4. Processa o SLA (Maioria/Média) para calcular a pontuação real
+        // 4. Processa o SLA (Maioria/Média) e anexa a lista de itens em cada categoria
         const analise = indicadoresService.processarMes(registros);
         let pontosTotais = analise.totalConsolidado;
 
-        // 5. Soma os pontos bônus das Ideias Aprovadas no mês selecionado
-        const [ideias] = await db.query(
-            'SELECT COUNT(*) as qtd, SUM(pontos_bonus) as total_bonus FROM ideias WHERE mes_id = ? AND status = "aprovada"',
+        analise.analiseCategorias = analise.analiseCategorias.map(cat => {
+            const itensCategoria = registros
+                .filter(r => r.tipo === cat.tipo && (r.status === 'aprovado' || r.status === 'pendente'))
+                .map(r => ({
+                    titulo: (r.cliente && r.cliente.trim()) ? r.cliente.trim() : 'Sem título',
+                    detalhe: formatarDetalheItem(r),
+                    data: formatarDataCurta(r.created_at || r.data_criacao || r.data_registro || r.data)
+                }));
+            return { ...cat, itens: itensCategoria };
+        });
+
+        // 5. Busca e soma os pontos bônus das Ideias Aprovadas no mês selecionado
+        const [ideiasAprovadas] = await db.query(
+            'SELECT * FROM ideias WHERE mes_id = ? AND status = "aprovada" ORDER BY id DESC',
             [mesSelecionado.id]
         );
-        const bonusIdeias = parseInt(ideias[0].total_bonus || 0, 10);
-        const qtdIdeias = parseInt(ideias[0].qtd || 0, 10);
+        let bonusIdeias = 0;
+        ideiasAprovadas.forEach(ideia => {
+            bonusIdeias += parseInt(ideia.pontos_bonus || 0, 10);
+        });
         pontosTotais += bonusIdeias;
 
         if (bonusIdeias > 0) {
             analise.analiseCategorias.push({
                 tipo: 'Ideias Aprovadas',
-                qtdRegistros: qtdIdeias,
+                qtdRegistros: ideiasAprovadas.length,
                 pontos: bonusIdeias,
-                mensagem: 'Pontos bônus concedidos via Banco de Ideias'
+                mensagem: 'Pontos bônus concedidos via Banco de Ideias',
+                itens: ideiasAprovadas.map(ideia => ({
+                    titulo: ideia.titulo || 'Ideia sem título',
+                    detalhe: '+' + parseInt(ideia.pontos_bonus || 0, 10) + ' pts',
+                    data: formatarDataCurta(ideia.created_at || ideia.data_criacao || ideia.data)
+                }))
             });
         }
 
         // 6. Calcula a Bonificação em Dinheiro
         const bonificacao = await bonificacaoService.calcularBonificacao(pontosTotais);
 
-        // 7. Envia tudo para a View (incluindo a lista de meses)
+        // 7. Envia tudo para a View (incluindo a lista de meses e os itens das categorias)
         res.send(renderDashboard(
             req.session.usuario,
             mesSelecionado,

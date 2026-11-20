@@ -57,6 +57,8 @@ module.exports = function renderLayout(title, content, scripts = '', usuario = n
                 z-index: 1045;
                 transition: transform 0.25s ease-in-out;
                 overflow-y: auto;
+                display: flex;
+                flex-direction: column;
             }
             .sidebar .brand {
                 padding: 15px;
@@ -69,6 +71,48 @@ module.exports = function renderLayout(title, content, scripts = '', usuario = n
                 gap: 10px;
                 border-bottom: 1px solid #eee;
                 position: relative;
+            }
+            .sidebar-footer {
+                margin-top: auto;
+                padding: 14px 16px;
+                border-top: 1px solid #eee;
+                text-align: center;
+                background-color: #fafafa;
+            }
+            .sidebar-footer .dev-credit {
+                font-size: 0.72rem;
+                color: #6c757d;
+                margin-bottom: 8px;
+            }
+            .sidebar-footer .dev-links {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 10px;
+            }
+            .sidebar-footer .dev-link {
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1rem;
+                color: #555;
+                background: #fff;
+                border: 1px solid #e2e6ea;
+                text-decoration: none;
+                transition: all 0.2s ease;
+            }
+            .sidebar-footer .dev-link-wa:hover {
+                color: #fff;
+                background-color: #25D366;
+                border-color: #25D366;
+            }
+            .sidebar-footer .dev-link-ig:hover {
+                color: #fff;
+                background-color: #E1306C;
+                border-color: #E1306C;
             }
             .sidebar-close-btn {
                 display: none;
@@ -157,13 +201,6 @@ module.exports = function renderLayout(title, content, scripts = '', usuario = n
                 /* Evita zoom automático no iOS ao focar inputs */
                 input.form-control, select.form-select, textarea.form-control {
                     font-size: 16px !important;
-                }
-                #ecoToastContainer {
-                    top: 12px;
-                    right: 12px;
-                    left: 12px;
-                    max-width: none;
-                    width: auto;
                 }
             }
 
@@ -346,14 +383,25 @@ module.exports = function renderLayout(title, content, scripts = '', usuario = n
                         <i class="ph ph-x"></i>
                     </button>
                 </div>
-                <div class="mt-3" id="mainMenu">
+                <div class="mt-3 flex-grow-1" id="mainMenu">
                     <a href="/dashboard" class="nav-link"><i class="ph ph-squares-four"></i> Dashboard</a>
                     <a href="/meses" class="nav-link"><i class="ph ph-calendar"></i> Gestão de Meses</a>
                     <a href="/ideias" class="nav-link"><i class="ph ph-lightbulb"></i> Novas Ideias</a>
                     <a href="/relatorios" class="nav-link"><i class="ph ph-file-xls"></i> Relatórios Excel</a>
                     <hr class="mx-3 my-2 text-muted">
                     <a href="/configuracoes" class="nav-link"><i class="ph ph-gear"></i> Configurações</a>
-                    <a href="/logout" class="nav-link text-danger mt-auto"><i class="ph ph-sign-out"></i> Sair</a>
+                    <a href="/logout" class="nav-link text-danger"><i class="ph ph-sign-out"></i> Sair</a>
+                </div>
+                <div class="sidebar-footer">
+                    <div class="dev-credit">Desenvolvido por <strong>71dev</strong></div>
+                    <div class="dev-links">
+                        <a href="https://wa.me/5571983174920" target="_blank" rel="noopener noreferrer" class="dev-link dev-link-wa" title="WhatsApp 71dev" aria-label="WhatsApp 71dev">
+                            <i class="ph-fill ph-whatsapp-logo"></i>
+                        </a>
+                        <a href="https://www.instagram.com/71dev_/" target="_blank" rel="noopener noreferrer" class="dev-link dev-link-ig" title="Instagram 71dev" aria-label="Instagram 71dev">
+                            <i class="ph-fill ph-instagram-logo"></i>
+                        </a>
+                    </div>
                 </div>
             </nav>
 
