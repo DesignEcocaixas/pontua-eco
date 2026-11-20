@@ -244,15 +244,26 @@ module.exports = function renderLayout(title, content, scripts = '', usuario = n
             ========================================================= */
             #ecoToastContainer {
                 position: fixed;
-                top: 20px;
+                top: auto;
+                bottom: 20px;
                 right: 20px;
                 z-index: 9999;
                 display: flex;
-                flex-direction: column;
+                flex-direction: column-reverse;
                 gap: 10px;
                 max-width: 360px;
                 width: calc(100vw - 40px);
                 pointer-events: none;
+            }
+            @media (max-width: 575.98px) {
+                #ecoToastContainer {
+                    top: auto;
+                    bottom: 12px;
+                    right: 12px;
+                    left: 12px;
+                    max-width: none;
+                    width: auto;
+                }
             }
             .eco-toast {
                 pointer-events: auto;
